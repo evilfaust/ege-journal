@@ -31,12 +31,13 @@ curl -L https://github.com/pocketbase/pocketbase/releases/latest/download/pocket
 
 ### 3️⃣ Запустить всё
 
+Запустите одновременно dev-сервер и PocketBase через npm-скрипт:
+
 ```bash
-chmod +x start.sh
-./start.sh
+npm run pb
 ```
 
-Откройте http://localhost:5173 в браузере.
+Это эквивалентно запуску `./start.sh` — dev-сервер будет доступен на http://localhost:5173, а PocketBase API — на http://127.0.0.1:8090.
 
 ---
 
