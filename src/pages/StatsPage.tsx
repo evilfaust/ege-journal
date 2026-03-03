@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell } from 'recharts'
 import { pb, type Group, type Student, type Exam, type StudentResult, type StudentAnswer, problemUrl, examUrl, filterIn } from '../lib/pb'
 import { AlertTriangle, TrendingDown, Users, Copy, Check, X } from 'lucide-react'
@@ -37,8 +37,11 @@ interface DebtModalState {
 }
 
 export default function StatsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialGroup = searchParams.get('group') || 'all'
+
   const [groups, setGroups] = useState<Group[]>([])
-  const [selectedGroup, setSelectedGroup] = useState<string>('all')
+  const [selectedGroup, setSelectedGroup] = useState<string>(initialGroup)
   const [debts, setDebts] = useState<DebtItem[]>([])
   const [debtModal, setDebtModal] = useState<DebtModalState | null>(null)
   const [copied, setCopied] = useState(false)
@@ -56,6 +59,14 @@ export default function StatsPage() {
   useEffect(() => {
     pb.collection('groups').getFullList<Group>({ sort: 'name' }).then(setGroups).catch(console.error)
   }, [])
+
+  // Sync selectedGroup from URL when it changes externally
+  useEffect(() => {
+    const urlGroup = searchParams.get('group')
+    if (urlGroup && urlGroup !== selectedGroup) {
+      setSelectedGroup(urlGroup)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     load()
@@ -239,7 +250,10 @@ export default function StatsPage() {
       {/* Group filter */}
       <div className="flex gap-2 flex-wrap">
         <button
-          onClick={() => setSelectedGroup('all')}
+          onClick={() => {
+            setSelectedGroup('all')
+            setSearchParams({})
+          }}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedGroup === 'all'
             ? 'bg-brand-600 text-white'
             : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
@@ -250,7 +264,10 @@ export default function StatsPage() {
         {groups.map((g) => (
           <button
             key={g.id}
-            onClick={() => setSelectedGroup(g.id)}
+            onClick={() => {
+              setSelectedGroup(g.id)
+              setSearchParams({ group: g.id })
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedGroup === g.id
               ? 'bg-brand-600 text-white'
               : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'

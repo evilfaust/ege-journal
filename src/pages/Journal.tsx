@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { pb, type Group, type Student, type Exam, type StudentResult, examUrl, filterIn } from '../lib/pb'
 import GradeCell, { gradeClass } from '../components/GradeCell'
@@ -18,6 +18,28 @@ function fmtDate(d: string) {
   }
 }
 
+function fmtMonth(d: string) {
+  try {
+    const parsed = d.includes('-')
+      ? parse(d, 'yyyy-MM-dd', new Date())
+      : parse(d, 'dd.MM.yyyy', new Date())
+    return format(parsed, 'MMMM yyyy', { locale: ru })
+  } catch {
+    return d
+  }
+}
+
+function getMonthKey(d: string) {
+  try {
+    const parsed = d.includes('-')
+      ? parse(d, 'yyyy-MM-dd', new Date())
+      : parse(d, 'dd.MM.yyyy', new Date())
+    return format(parsed, 'yyyy-MM', { locale: ru })
+  } catch {
+    return d
+  }
+}
+
 export default function Journal() {
   const { groupId } = useParams()
   const navigate = useNavigate()
@@ -29,6 +51,36 @@ export default function Journal() {
   const [results, setResults] = useState<Map<string, StudentResult>>(new Map())
   const [selectedCell, setSelectedCell] = useState<{ studentId: string; examId: string } | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Group exams by month
+  const examsByMonth = useMemo(() => {
+    const groups: Record<string, Exam[]> = {}
+    const sorted = [...exams].sort((a, b) => a.date.localeCompare(b.date))
+    for (const exam of sorted) {
+      const key = getMonthKey(exam.date)
+      if (!groups[key]) groups[key] = []
+      groups[key].push(exam)
+    }
+    return groups
+  }, [exams])
+
+  const availableMonths = useMemo(() => {
+    return Object.keys(examsByMonth).sort((a, b) => a.localeCompare(b))
+  }, [examsByMonth])
+
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
+
+  // Set default month to most recent
+  useEffect(() => {
+    if (availableMonths.length > 0 && !selectedMonth) {
+      setSelectedMonth(availableMonths[0]!)
+    }
+  }, [availableMonths, selectedMonth])
+
+  const visibleExams = useMemo(() => {
+    if (!selectedMonth) return exams
+    return examsByMonth[selectedMonth] || []
+  }, [selectedMonth, examsByMonth, exams])
 
   // Load all groups
   useEffect(() => {
@@ -130,53 +182,88 @@ export default function Journal() {
         </div>
       )}
 
-      {/* Leaderboard */}
+      {/* Leaderboard & Debtors */}
       {!loading && exams.length > 0 && students.length > 0 && (
         (() => {
-          // Find students with 0 debts (ignoring 'not taken' tests if they are exempt, but counting taken tests)
+          // Find students with 0 debts for visible exams
           const honorStudents = students.filter(student => {
-            const studentResults = exams.map(e => getResult(student.id, e.id));
-            // Has at least one taken test
+            const studentResults = visibleExams.map(e => getResult(student.id, e.id));
             const hasTaken = studentResults.some(r => r && !r.did_not_take);
             if (!hasTaken) return false;
-
-            // No active debts
             const hasDebt = studentResults.some(r => r && r.did_not_take && !r.is_exempt);
             return !hasDebt;
           })
 
-          if (honorStudents.length === 0) return null;
+          // Find debtors for visible exams
+          const debtorMap = new Map<string, { student: Student; count: number }>()
+          for (const student of students) {
+            const studentResults = visibleExams.map(e => getResult(student.id, e.id))
+            const debts = studentResults.filter(r => r && r.did_not_take && !r.is_exempt)
+            if (debts.length > 0) {
+              debtorMap.set(student.id, { student, count: debts.length })
+            }
+          }
+          const debtors = Array.from(debtorMap.values()).sort((a, b) => b.count - a.count)
+
+          if (honorStudents.length === 0 && debtors.length === 0) return null;
 
           return (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                <span className="text-6xl">🏆</span>
-              </div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">🏆</span>
-                <h3 className="font-bold text-amber-900">Доска почета</h3>
-                <span className="text-xs font-medium bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full ml-2">
-                  0 долгов
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {honorStudents.map(s => (
-                  <Link
-                    key={s.id}
-                    to={`/student/${s.id}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-200 shadow-sm rounded-lg text-sm font-semibold text-amber-900 hover:bg-amber-50 hover:border-amber-300 transition-colors"
-                  >
-                    {s.name}
-                  </Link>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Honor Board */}
+              {honorStudents.length > 0 && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <span className="text-6xl">🏆</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🏆</span>
+                    <h3 className="font-bold text-amber-900">Доска почета</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {honorStudents.map(s => (
+                      <Link
+                        key={s.id}
+                        to={`/student/${s.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-200 shadow-sm rounded-lg text-sm font-semibold text-amber-900 hover:bg-amber-50 hover:border-amber-300 transition-colors"
+                      >
+                        {s.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Debtors */}
+              {debtors.length > 0 && (
+                <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <span className="text-6xl">⚠️</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">⚠️</span>
+                    <h3 className="font-bold text-red-900">Должники</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {debtors.map(({ student, count }) => (
+                      <Link
+                        key={student.id}
+                        to={`/student/${student.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 shadow-sm rounded-lg text-sm font-semibold text-red-900 hover:bg-red-50 hover:border-red-300 transition-colors"
+                      >
+                        {student.name}
+                        <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{count}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )
         })()
       )}
 
-      {/* Legend */}
-      <div className="flex gap-3 flex-wrap text-xs">
+      {/* Legend & Month filter */}
+      <div className="flex gap-3 flex-wrap text-xs items-center">
         {[
           { cls: 'grade-5', label: 'Отлично' },
           { cls: 'grade-4', label: 'Хорошо' },
@@ -188,6 +275,23 @@ export default function Journal() {
             {label}
           </span>
         ))}
+        {availableMonths.length > 1 && (
+          <div className="ml-auto flex gap-1 flex-wrap">
+            {availableMonths.map((month) => (
+              <button
+                key={month}
+                onClick={() => setSelectedMonth(month)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                  selectedMonth === month
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
+                }`}
+              >
+                {fmtMonth(examsByMonth[month]?.[0]?.date || month)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Journal table */}
@@ -206,24 +310,30 @@ export default function Journal() {
                   <th className="text-left px-4 py-3 font-semibold text-gray-700 sticky left-0 z-10 bg-gray-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[180px]">
                     Студент
                   </th>
-                  {exams.map((exam) => (
+                  {visibleExams.map((exam) => (
                     <th
                       key={exam.id}
                       className="text-center px-3 py-3 font-medium text-gray-600 min-w-[90px]"
                     >
-                      <a
-                        href={examUrl(exam.exam_id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex flex-col items-center gap-0.5 hover:text-brand-600 group"
-                        title={exam.title}
-                      >
-                        <span className="text-xs font-semibold">{fmtDate(exam.date)}</span>
-                        <span className="text-[10px] text-gray-400 group-hover:text-brand-400 flex items-center gap-0.5">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Link
+                          to={`/exam/${exam.id}`}
+                          className="text-xs font-semibold hover:text-brand-600 transition-colors"
+                          title="Статистика по тесту"
+                        >
+                          {fmtDate(exam.date)}
+                        </Link>
+                        <a
+                          href={examUrl(exam.exam_id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-gray-400 hover:text-brand-500 flex items-center gap-0.5"
+                          title={exam.title}
+                        >
                           #{exam.exam_id.slice(-4)}
                           <ExternalLink size={8} />
-                        </span>
-                      </a>
+                        </a>
+                      </div>
                     </th>
                   ))}
                   <th className="text-center px-3 py-3 font-medium text-gray-500 min-w-[70px]">
@@ -234,7 +344,7 @@ export default function Journal() {
               </thead>
               <tbody>
                 {students.map((student, idx) => {
-                  const studentResults = exams.map((e) => getResult(student.id, e.id))
+                  const studentResults = visibleExams.map((e) => getResult(student.id, e.id))
                   const taken = studentResults.filter((r) => r && !r.did_not_take)
                   const avgGrade =
                     taken.length > 0
@@ -256,7 +366,7 @@ export default function Journal() {
                         </Link>
                       </td>
 
-                      {exams.map((exam) => {
+                      {visibleExams.map((exam) => {
                         const r = getResult(student.id, exam.id)
                         return (
                           <td key={exam.id} className="px-3 py-2.5 text-center">
@@ -298,13 +408,13 @@ export default function Journal() {
       )}
 
       {/* Summary row */}
-      {!loading && exams.length > 0 && (
+      {!loading && visibleExams.length > 0 && (
         <div className="flex gap-4 flex-wrap text-xs text-gray-500">
           <span>
             <strong className="text-gray-700">{students.length}</strong> студентов
           </span>
           <span>
-            <strong className="text-gray-700">{exams.length}</strong> тестов
+            <strong className="text-gray-700">{visibleExams.length}</strong> тестов (из {exams.length})
           </span>
           {activeGroup && (
             <span className="text-gray-400">
