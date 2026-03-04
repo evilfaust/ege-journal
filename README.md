@@ -37,7 +37,7 @@ curl -L https://github.com/pocketbase/pocketbase/releases/latest/download/pocket
 npm run pb
 ```
 
-Это эквивалентно запуску `./start.sh` — dev-сервер будет доступен на http://localhost:5173, а PocketBase API — на http://127.0.0.1:8090.
+Это эквивалентно запуску `./start.sh` — dev-сервер будет доступен на http://localhost:5151, а PocketBase API — на http://127.0.0.1:8090.
 
 ---
 
