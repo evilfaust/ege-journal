@@ -3,7 +3,7 @@
  * Handles deduplication: existing groups/students/exams are reused.
  */
 
-import { pb } from './pb'
+import { pb, type Exam, type Group, type Student, type StudentResult } from './pb'
 import type { ParsedSheet, ParsedExam, ParsedStudent } from './excel-parser'
 
 export interface ImportProgress {
@@ -13,6 +13,180 @@ export interface ImportProgress {
 }
 
 type ProgressCallback = (p: ImportProgress) => void
+
+export interface ImportPreviewSheet {
+  groupName: string
+  students: {
+    create: number
+    reuse: number
+  }
+  exams: {
+    create: number
+    update: number
+    reuse: number
+  }
+  results: {
+    create: number
+    update: number
+    skip: number
+  }
+}
+
+export interface ImportPreview {
+  sheets: ImportPreviewSheet[]
+  totals: {
+    groupsToCreate: number
+    studentsToCreate: number
+    examsToCreate: number
+    examsToUpdate: number
+    resultsToCreate: number
+    resultsToUpdate: number
+    skippedDuplicates: number
+  }
+}
+
+type PreviewResultState = {
+  did_not_take: boolean
+}
+
+type PreviewExamState = {
+  title: string
+  date: string
+  label: string
+  taskCount: number
+}
+
+export async function previewSheetsImport(sheets: ParsedSheet[]): Promise<ImportPreview> {
+  const [groups, students, exams, results] = await Promise.all([
+    pb.collection('groups').getFullList<Group>({ sort: 'name' }),
+    pb.collection('students').getFullList<Student>(),
+    pb.collection('exams').getFullList<Exam>(),
+    pb.collection('student_results').getFullList<StudentResult>(),
+  ])
+
+  const groupNameById = new Map(groups.map((group) => [group.id, group.name]))
+
+  const knownGroups = new Set(groups.map((group) => group.name))
+  const knownStudents = new Set(
+    students.map((student) => `${groupNameById.get(student.group) ?? student.group}__${student.name.trim()}`),
+  )
+  const knownExams = new Map<string, PreviewExamState>(
+    exams.map((exam) => [
+      `${groupNameById.get(exam.group) ?? exam.group}__${exam.exam_id}`,
+      {
+        title: exam.title,
+        date: exam.date,
+        label: exam.label,
+        taskCount: exam.task_count,
+      },
+    ]),
+  )
+
+  const studentGroupById = new Map(students.map((student) => [student.id, student.group]))
+  const examById = new Map(exams.map((exam) => [exam.id, exam]))
+  const knownResults = new Map<string, PreviewResultState>()
+  for (const result of results) {
+    const groupName = groupNameById.get(studentGroupById.get(result.student) ?? '')
+    const exam = examById.get(result.exam)
+    if (!groupName || !exam) continue
+
+    const student = students.find((item) => item.id === result.student)
+    if (!student) continue
+
+    const resultKey = `${groupName}__${student.name.trim()}__${exam.exam_id}`
+    knownResults.set(resultKey, { did_not_take: result.did_not_take })
+  }
+
+  const previewSheets: ImportPreviewSheet[] = []
+  const totals = {
+    groupsToCreate: 0,
+    studentsToCreate: 0,
+    examsToCreate: 0,
+    examsToUpdate: 0,
+    resultsToCreate: 0,
+    resultsToUpdate: 0,
+    skippedDuplicates: 0,
+  }
+
+  for (const sheet of sheets) {
+    const previewSheet: ImportPreviewSheet = {
+      groupName: sheet.groupName,
+      students: { create: 0, reuse: 0 },
+      exams: { create: 0, update: 0, reuse: 0 },
+      results: { create: 0, update: 0, skip: 0 },
+    }
+
+    if (!knownGroups.has(sheet.groupName)) {
+      knownGroups.add(sheet.groupName)
+      totals.groupsToCreate += 1
+    }
+
+    for (const exam of sheet.exams) {
+      const examKey = `${sheet.groupName}__${exam.exam_id}`
+      const existingExam = knownExams.get(examKey)
+
+      if (!existingExam) {
+        knownExams.set(examKey, {
+          title: exam.title,
+          date: exam.date,
+          label: exam.label,
+          taskCount: exam.taskCount,
+        })
+        previewSheet.exams.create += 1
+        totals.examsToCreate += 1
+      } else if (
+        existingExam.title !== exam.title ||
+        existingExam.date !== exam.date ||
+        existingExam.label !== exam.label ||
+        existingExam.taskCount !== exam.taskCount
+      ) {
+        knownExams.set(examKey, {
+          title: exam.title,
+          date: exam.date,
+          label: exam.label,
+          taskCount: exam.taskCount,
+        })
+        previewSheet.exams.update += 1
+        totals.examsToUpdate += 1
+      } else {
+        previewSheet.exams.reuse += 1
+      }
+    }
+
+    for (const student of sheet.students) {
+      const studentKey = `${sheet.groupName}__${student.name.trim()}`
+      if (!knownStudents.has(studentKey)) {
+        knownStudents.add(studentKey)
+        previewSheet.students.create += 1
+        totals.studentsToCreate += 1
+      } else {
+        previewSheet.students.reuse += 1
+      }
+
+      for (const result of student.results) {
+        const resultKey = `${studentKey}__${result.exam_id}`
+        const existingResult = knownResults.get(resultKey)
+
+        if (!existingResult) {
+          knownResults.set(resultKey, { did_not_take: result.did_not_take })
+          previewSheet.results.create += 1
+          totals.resultsToCreate += 1
+        } else if (existingResult.did_not_take && !result.did_not_take) {
+          knownResults.set(resultKey, { did_not_take: false })
+          previewSheet.results.update += 1
+          totals.resultsToUpdate += 1
+        } else {
+          previewSheet.results.skip += 1
+          totals.skippedDuplicates += 1
+        }
+      }
+    }
+
+    previewSheets.push(previewSheet)
+  }
+
+  return { sheets: previewSheets, totals }
+}
 
 export async function importSheets(
   sheets: ParsedSheet[],
@@ -81,11 +255,17 @@ async function upsertExam(e: ParsedExam, groupId: string) {
     })
     if (list.items.length > 0) {
       const existing = list.items[0]!
-      if (existing.date !== e.date || existing.label !== e.label || existing.title !== e.title) {
+      if (
+        existing.date !== e.date ||
+        existing.label !== e.label ||
+        existing.title !== e.title ||
+        existing.task_count !== e.taskCount
+      ) {
         return pb.collection('exams').update(existing.id, {
           title: e.title,
           date: e.date,
           label: e.label,
+          task_count: e.taskCount,
         })
       }
       return existing

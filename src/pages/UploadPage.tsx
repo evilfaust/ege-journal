@@ -1,15 +1,30 @@
 import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 'react'
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
+import {
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  X,
+  Play,
+  RefreshCcw,
+} from 'lucide-react'
 import { parseJournalWorkbook, type ParsedSheet } from '../lib/excel-parser'
-import { importSheets, type ImportProgress } from '../lib/import-service'
+import {
+  importSheets,
+  previewSheetsImport,
+  type ImportPreview,
+  type ImportProgress,
+} from '../lib/import-service'
 
-type FileStatus = 'idle' | 'parsing' | 'importing' | 'done' | 'error'
+type FileStatus = 'idle' | 'parsing' | 'ready' | 'importing' | 'done' | 'error'
 
 interface FileState {
   file: File
   status: FileStatus
   error?: string
   sheets?: ParsedSheet[]
+  preview?: ImportPreview
   progress?: ImportProgress
 }
 
@@ -18,34 +33,56 @@ export default function UploadPage() {
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const processFile = useCallback(async (file: File) => {
-    const entry: FileState = { file, status: 'parsing' }
-    setFiles((prev) => [...prev, entry])
+  const updateFile = useCallback((file: File, patch: Partial<FileState>) => {
+    setFiles((prev) =>
+      prev.map((item) => (item.file === file ? { ...item, ...patch } : item)),
+    )
+  }, [])
 
-    const update = (patch: Partial<FileState>) =>
-      setFiles((prev) =>
-        prev.map((f) => (f.file === file ? { ...f, ...patch } : f)),
-      )
+  const processFile = useCallback(async (file: File) => {
+    setFiles((prev) => {
+      const next = prev.filter((item) => item.file !== file)
+      return [...next, { file, status: 'parsing' }]
+    })
 
     try {
       const buffer = await file.arrayBuffer()
       const sheets = parseJournalWorkbook(buffer)
 
       if (sheets.length === 0) {
-        update({ status: 'error', error: 'Не найдено данных. Проверьте формат файла.' })
+        updateFile(file, {
+          status: 'error',
+          error: 'Не найдено данных. Проверьте формат файла.',
+        })
         return
       }
 
-      update({ status: 'importing', sheets })
-
-      await importSheets(sheets, (p) => update({ progress: p }))
-
-      update({ status: 'done' })
+      const preview = await previewSheetsImport(sheets)
+      updateFile(file, { status: 'ready', sheets, preview, error: undefined })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      update({ status: 'error', error: msg })
+      updateFile(file, { status: 'error', error: msg })
     }
-  }, [])
+  }, [updateFile])
+
+  const startImport = useCallback(async (file: File) => {
+    const current = files.find((item) => item.file === file)
+    if (!current?.sheets) return
+
+    try {
+      updateFile(file, {
+        status: 'importing',
+        progress: { stage: 'Подготовка импорта…', current: 0, total: 1 },
+      })
+
+      await importSheets(current.sheets, (progress) => updateFile(file, { progress }))
+
+      updateFile(file, { status: 'done', error: undefined })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      updateFile(file, { status: 'error', error: msg })
+    }
+  }, [files, updateFile])
 
   const handleDrop = useCallback(
     (e: DragEvent) => {
@@ -54,35 +91,36 @@ export default function UploadPage() {
       const dropped = Array.from(e.dataTransfer.files).filter(
         (f) => f.name.endsWith('.xlsx') || f.name.endsWith('.xls'),
       )
-      dropped.forEach(processFile)
+      dropped.forEach((file) => void processFile(file))
     },
     [processFile],
   )
 
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      Array.from(e.target.files ?? []).forEach(processFile)
+      Array.from(e.target.files ?? []).forEach((file) => void processFile(file))
       e.target.value = ''
     },
     [processFile],
   )
 
   const remove = (file: File) =>
-    setFiles((prev) => prev.filter((f) => f.file !== file))
+    setFiles((prev) => prev.filter((item) => item.file !== file))
+
+  const readyFiles = files.filter((file) => file.status === 'ready')
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Drop zone */}
+    <div className="mx-auto max-w-3xl space-y-6">
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
         className={`
-          border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all
+          rounded-[28px] border-2 border-dashed p-12 text-center transition-all cursor-pointer
           ${dragging
             ? 'border-brand-500 bg-brand-50'
-            : 'border-gray-300 bg-white hover:border-brand-400 hover:bg-brand-50/40'
+            : 'border-slate-300 bg-white/85 hover:border-brand-400 hover:bg-brand-50/40'
           }
         `}
       >
@@ -95,79 +133,148 @@ export default function UploadPage() {
           onChange={handleChange}
         />
         <Upload
-          size={40}
-          className={`mx-auto mb-3 ${dragging ? 'text-brand-500' : 'text-gray-400'}`}
+          size={42}
+          className={`mx-auto mb-4 ${dragging ? 'text-brand-500' : 'text-slate-400'}`}
         />
-        <p className="text-base font-medium text-gray-700">
-          Перетащите файлы сюда или{' '}
-          <span className="text-brand-600 underline-offset-2 hover:underline">
-            выберите
-          </span>
+        <p className="text-lg font-semibold text-slate-800">
+          Перетащите Excel-файлы сюда или выберите вручную
         </p>
-        <p className="mt-1 text-sm text-gray-400">
-          Экспорт из "Решу ЕГЭ" · .xlsx файлы
+        <p className="mt-2 text-sm text-slate-500">
+          Сначала приложение покажет предпросмотр импорта, затем вы подтвердите запись в базу.
         </p>
       </div>
 
-      {/* File list */}
       {files.length > 0 && (
         <div className="space-y-3">
-          {files.map((f) => (
-            <div key={f.file.name + f.file.size} className="card p-4 flex items-start gap-4">
-              <FileSpreadsheet size={22} className="text-emerald-500 mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{f.file.name}</p>
+          {readyFiles.length > 1 && (
+            <div className="card flex items-center justify-between gap-4 p-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Несколько файлов готовы к импорту</p>
+                <p className="text-xs text-slate-500">
+                  Предпросмотр уже собран. Можно подтвердить импорт сразу для всех.
+                </p>
+              </div>
+              <button
+                onClick={() => readyFiles.forEach((file) => void startImport(file.file))}
+                className="btn-primary"
+              >
+                <Play size={15} />
+                Импортировать все
+              </button>
+            </div>
+          )}
 
-                {f.status === 'parsing' && (
-                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+          {files.map((fileState) => (
+            <div key={fileState.file.name + fileState.file.size} className="card flex items-start gap-4 p-4">
+              <FileSpreadsheet size={22} className="mt-0.5 shrink-0 text-emerald-500" />
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-800">{fileState.file.name}</p>
+
+                {fileState.status === 'parsing' && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                     <Loader2 size={12} className="animate-spin" />
-                    Разбираем Excel…
+                    Разбираем файл и сравниваем с текущей базой…
                   </div>
                 )}
 
-                {f.status === 'importing' && (
-                  <div className="mt-1 space-y-1">
+                {fileState.status === 'ready' && fileState.preview && fileState.sheets && (
+                  <div className="mt-3 space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <PreviewBadge label="Новые группы" value={fileState.preview.totals.groupsToCreate} tone="blue" />
+                      <PreviewBadge label="Новые ученики" value={fileState.preview.totals.studentsToCreate} tone="emerald" />
+                      <PreviewBadge label="Новые тесты" value={fileState.preview.totals.examsToCreate} tone="violet" />
+                      <PreviewBadge label="Обновить тесты" value={fileState.preview.totals.examsToUpdate} tone="amber" />
+                      <PreviewBadge label="Новые результаты" value={fileState.preview.totals.resultsToCreate} tone="emerald" />
+                      <PreviewBadge label="Обновить результаты" value={fileState.preview.totals.resultsToUpdate} tone="amber" />
+                      <PreviewBadge label="Пропустить дубли" value={fileState.preview.totals.skippedDuplicates} tone="slate" />
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Предпросмотр по листам
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {fileState.preview.sheets.map((sheet) => (
+                          <div key={sheet.groupName} className="rounded-xl bg-white px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-semibold text-slate-800">{sheet.groupName}</p>
+                              <span className="text-xs text-slate-400">
+                                {sheet.exams.create + sheet.exams.update + sheet.exams.reuse} тестов
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                              Ученики: +{sheet.students.create}, повторно {sheet.students.reuse} ·
+                              Тесты: +{sheet.exams.create}, обновить {sheet.exams.update}, без изменений {sheet.exams.reuse} ·
+                              Результаты: +{sheet.results.create}, обновить {sheet.results.update}, пропустить {sheet.results.skip}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => void startImport(fileState.file)}
+                        className="btn-primary"
+                      >
+                        <Play size={15} />
+                        Импортировать
+                      </button>
+                      <button
+                        onClick={() => void processFile(fileState.file)}
+                        className="btn-ghost border border-slate-200"
+                      >
+                        <RefreshCcw size={15} />
+                        Обновить предпросмотр
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {fileState.status === 'importing' && (
+                  <div className="mt-2 space-y-1.5">
                     <div className="flex items-center gap-2 text-xs text-brand-600">
                       <Loader2 size={12} className="animate-spin" />
-                      {f.progress?.stage ?? 'Импорт…'}
+                      {fileState.progress?.stage ?? 'Импорт…'}
                     </div>
-                    {f.progress && f.progress.total > 0 && (
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    {fileState.progress && fileState.progress.total > 0 && (
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                         <div
-                          className="h-full bg-brand-500 rounded-full transition-all"
-                          style={{ width: `${(f.progress.current / f.progress.total) * 100}%` }}
+                          className="h-full rounded-full bg-brand-500 transition-all"
+                          style={{ width: `${(fileState.progress.current / fileState.progress.total) * 100}%` }}
                         />
                       </div>
                     )}
                   </div>
                 )}
 
-                {f.status === 'done' && f.sheets && (
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {f.sheets.map((s) => (
+                {fileState.status === 'done' && fileState.sheets && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {fileState.sheets.map((sheet) => (
                       <span
-                        key={s.groupName}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium"
+                        key={sheet.groupName}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
                       >
                         <CheckCircle2 size={11} />
-                        {s.groupName} · {s.students.length} уч. · {s.exams.length} тестов
+                        {sheet.groupName} · {sheet.students.length} уч. · {sheet.exams.length} тестов
                       </span>
                     ))}
                   </div>
                 )}
 
-                {f.status === 'error' && (
-                  <div className="flex items-start gap-2 mt-1 text-xs text-red-600">
+                {fileState.status === 'error' && (
+                  <div className="mt-2 flex items-start gap-2 text-xs text-red-600">
                     <AlertCircle size={12} className="mt-0.5 shrink-0" />
-                    <span>{f.error}</span>
+                    <span>{fileState.error}</span>
                   </div>
                 )}
               </div>
 
-              {(f.status === 'done' || f.status === 'error') && (
+              {(fileState.status === 'done' || fileState.status === 'error' || fileState.status === 'ready') && (
                 <button
-                  onClick={() => remove(f.file)}
-                  className="text-gray-400 hover:text-gray-600 shrink-0"
+                  onClick={() => remove(fileState.file)}
+                  className="shrink-0 text-slate-400 transition-colors hover:text-slate-600"
                 >
                   <X size={16} />
                 </button>
@@ -177,19 +284,43 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* Info */}
-      <div className="card p-5 bg-blue-50 border-blue-100">
-        <h3 className="text-sm font-semibold text-blue-800 mb-2">Как экспортировать из Решу ЕГЭ</h3>
-        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+      <div className="card border-blue-100 bg-blue-50 p-5">
+        <h3 className="mb-2 text-sm font-semibold text-blue-800">Как экспортировать из Решу ЕГЭ</h3>
+        <ol className="list-inside list-decimal space-y-1 text-sm text-blue-700">
           <li>Откройте журнал на сайте решу-егэ.рф</li>
-          <li>Выберите группу / класс</li>
+          <li>Выберите группу или класс</li>
           <li>Нажмите «Экспорт» → «Excel»</li>
-          <li>Загрузите скачанный .xlsx файл сюда</li>
+          <li>Загрузите скачанный `.xlsx` файл сюда</li>
         </ol>
-        <p className="text-xs text-blue-500 mt-3">
-          Поддерживаются файлы с несколькими листами (разные группы в одном файле).
+        <p className="mt-3 text-xs text-blue-500">
+          Поддерживаются файлы с несколькими листами. До записи в базу вы увидите, что создастся, что обновится и что будет пропущено как дубль.
         </p>
       </div>
     </div>
+  )
+}
+
+function PreviewBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'blue' | 'emerald' | 'violet' | 'amber' | 'slate'
+}) {
+  const tones = {
+    blue: 'border-blue-100 bg-blue-50 text-blue-700',
+    emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    violet: 'border-violet-100 bg-violet-50 text-violet-700',
+    amber: 'border-amber-100 bg-amber-50 text-amber-700',
+    slate: 'border-slate-200 bg-slate-100 text-slate-600',
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${tones[tone]}`}>
+      <strong>{value}</strong>
+      {label}
+    </span>
   )
 }
