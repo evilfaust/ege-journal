@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "pb": "npx concurrently \"npm run dev\" \"./pb serve --http=127.0.0.1:8090\"",
+    "pb": "npx concurrently \"npm run dev\" \"./scripts/run-pocketbase.sh\"",
     "backup:pb": "bash scripts/backup_pb.sh"
   },
   "dependencies": {

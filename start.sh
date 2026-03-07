@@ -4,6 +4,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+if [ -f ".env.bot" ]; then
+  set -a
+  . ./.env.bot
+  set +a
+fi
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "   📚 Журнал ЕГЭ"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -29,7 +35,7 @@ fi
 
 # 2. Start PocketBase
 echo "🗄️  Starting PocketBase..."
-./pb serve --http=127.0.0.1:8090 &
+./scripts/run-pocketbase.sh &
 PB_PID=$!
 
 # Wait for PocketBase to start

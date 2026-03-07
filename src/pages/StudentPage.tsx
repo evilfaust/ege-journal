@@ -553,15 +553,12 @@ export default function StudentPage() {
           </h3>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
             {weakTasks.map((t) => (
-              <a
+              <div
                 key={t.task_number}
-                href={problemUrl(t.problem_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="weak-item flex flex-col items-start gap-1 px-2.5 py-2 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50 transition-all group"
+                className="weak-item flex flex-col items-start gap-1 px-2.5 py-2 rounded-lg border border-gray-200 bg-white"
               >
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 group-hover:text-brand-700">
+                  <p className="text-sm font-semibold text-gray-800">
                     Задание {t.task_number}
                   </p>
                   <p className="text-xs text-gray-400">
@@ -583,7 +580,7 @@ export default function StudentPage() {
                     ))}
                   </div>
                 )}
-              </a>
+              </div>
             ))}
           </div>
         </div>

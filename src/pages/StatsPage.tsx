@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell } from 'recharts'
 import { pb, type Group, type Student, type Exam, type StudentResult, type StudentAnswer, problemUrl, examUrl, filterIn } from '../lib/pb'
 import { AlertTriangle, TrendingDown, Users, Copy, Check, X } from 'lucide-react'
+import { parseISO, startOfDay, subDays } from 'date-fns'
 
 interface DebtItem {
   student: Student
@@ -17,16 +18,44 @@ interface GroupStat {
   passRate: number
 }
 
+interface StudentDebtReport {
+  student: Student
+  exams: Exam[]
+}
+
+interface GroupDebtReport {
+  group: Group
+  students: StudentDebtReport[]
+}
+
+interface DebtReportData {
+  groups: GroupDebtReport[]
+  copyText: string
+  copyHtml: string
+}
+
 function fmtDate(d: string) {
   if (!d) return ''
   const dt = new Date(d)
   return dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+function getExamDebtDate(exam: Exam) {
+  return exam.label.match(/\d{2}\.\d{2}\.\d{2,4}/)?.[0] || fmtDate(exam.date)
+}
+
 interface DebtModalState {
   student: Student
   exams: Exam[]
 }
+
+type ReportPeriodKey = 'week' | 'month' | 'all'
+
+const REPORT_PERIODS: { key: ReportPeriodKey; title: string }[] = [
+  { key: 'week', title: 'За неделю' },
+  { key: 'month', title: 'За месяц' },
+  { key: 'all', title: 'За всё время' },
+]
 
 export default function StatsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -37,6 +66,8 @@ export default function StatsPage() {
   const [debts, setDebts] = useState<DebtItem[]>([])
   const [debtModal, setDebtModal] = useState<DebtModalState | null>(null)
   const [copied, setCopied] = useState(false)
+  const [reportCopied, setReportCopied] = useState(false)
+  const [selectedReportPeriod, setSelectedReportPeriod] = useState<ReportPeriodKey>('week')
 
   // Tasks/Answers state
   const [tasks, setTasks] = useState<{ id: string; exam: string; task_number: number; problem_id: string }[]>([])
@@ -201,6 +232,79 @@ export default function StatsPage() {
 
   const top10Weak = weakTasks.slice(0, 10)
 
+  const debtReport = useMemo<DebtReportData>(() => {
+    const now = startOfDay(new Date())
+    const weekStart = subDays(now, 6)
+    const monthStart = subDays(now, 29)
+    const selectedGroups = selectedGroup === 'all'
+      ? groups
+      : groups.filter((group) => group.id === selectedGroup)
+
+    const isInPeriod = (exam: Exam, period: ReportPeriodKey) => {
+      if (period === 'all') return true
+      const examDate = startOfDay(parseISO(exam.date))
+      return examDate >= (period === 'week' ? weekStart : monthStart) && examDate <= now
+    }
+
+    const reportGroups: GroupDebtReport[] = selectedGroups.map((group) => {
+      const groupDebts = debts.filter((item) => item.exam.group === group.id)
+      const studentMap = new Map<string, StudentDebtReport>()
+
+      for (const item of groupDebts) {
+        if (!isInPeriod(item.exam, selectedReportPeriod)) continue
+        const current = studentMap.get(item.student.id) ?? { student: item.student, exams: [] }
+        current.exams.push(item.exam)
+        studentMap.set(item.student.id, current)
+      }
+
+      const students = [...studentMap.values()]
+        .map(({ student, exams }) => ({
+          student,
+          exams: [...exams].sort((a, b) => b.date.localeCompare(a.date)),
+        }))
+        .sort((a, b) => b.exams.length - a.exams.length || a.student.name.localeCompare(b.student.name, 'ru'))
+
+      return { group, students }
+    })
+
+    const copyText = reportGroups.map(({ group, students }) => {
+      const lines = students.length > 0
+        ? students.map(({ student, exams }) => {
+          const examParts = exams
+            .map((exam) => `${getExamDebtDate(exam)} (${examUrl(exam.exam_id)})`)
+            .join('; ')
+          return `${student.name} — ${exams.length}: ${examParts}.`
+        })
+        : ['Долгов нет.']
+
+      return [group.name, '', ...lines].join('\n')
+    }).join('\n\n')
+
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+
+    const copyHtml = reportGroups.map(({ group, students }) => {
+      const lines = students.length > 0
+        ? students.map(({ student, exams }) => {
+          const examParts = exams
+            .map((exam) => `<a href="${examUrl(exam.exam_id)}">${escapeHtml(getExamDebtDate(exam))}</a>`)
+            .join('; ')
+          return `<div>${escapeHtml(student.name)} — ${exams.length}: ${examParts}.</div>`
+        })
+        : ['<div>Долгов нет.</div>']
+
+      return `<div>${escapeHtml(group.name)}</div><br/>${lines.join('')}`
+    }).join('<br/><br/>')
+
+    return { groups: reportGroups, copyText, copyHtml }
+  }, [debts, groups, selectedGroup, selectedReportPeriod])
+
+  const selectedPeriodTitle = REPORT_PERIODS.find((period) => period.key === selectedReportPeriod)?.title ?? ''
+
   function openDebtModal(student: Student) {
     const studentExams = debts.filter((d) => d.student.id === student.id).map((d) => d.exam)
     setDebtModal({ student, exams: studentExams })
@@ -210,14 +314,35 @@ export default function StatsPage() {
   function copyDebtList() {
     if (!debtModal) return
     const lines = debtModal.exams.map((e) => {
-      const dateStr = fmtDate(e.date)
-      return `${e.label || dateStr} — ${examUrl(e.exam_id)}`
+      return `${getExamDebtDate(e)} ${examUrl(e.exam_id)}`
     })
     const text = `Долги ${debtModal.student.name}:\n${lines.join('\n')}`
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  function copyDebtReport() {
+    if (!debtReport.copyText) return
+    const finish = () => {
+      setReportCopied(true)
+      setTimeout(() => setReportCopied(false), 2000)
+    }
+
+    if (typeof ClipboardItem !== 'undefined') {
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([debtReport.copyText], { type: 'text/plain' }),
+          'text/html': new Blob([debtReport.copyHtml], { type: 'text/html' }),
+        }),
+      ]).then(finish).catch(() => {
+        navigator.clipboard.writeText(debtReport.copyText).then(finish)
+      })
+      return
+    }
+
+    navigator.clipboard.writeText(debtReport.copyText).then(finish)
   }
 
   return (
@@ -292,6 +417,88 @@ export default function StatsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {debtReport.copyText && (
+            <div className="card p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Отчёт по долгам для чата</h3>
+                  <p className="text-sm text-gray-400">
+                    Формируется по выбранному периоду. Ниже можно проверить долги по кликабельным датам.
+                  </p>
+                </div>
+                <button
+                  onClick={copyDebtReport}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                >
+                  {reportCopied ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                  {reportCopied ? 'Скопировано!' : 'Скопировать отчёт'}
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {REPORT_PERIODS.map((period) => (
+                  <button
+                    key={period.key}
+                    onClick={() => {
+                      setSelectedReportPeriod(period.key)
+                      setReportCopied(false)
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                      selectedReportPeriod === period.key
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
+                    }`}
+                  >
+                    {period.title}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+                <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
+                  {selectedPeriodTitle}
+                </div>
+                <div className="max-h-[360px] space-y-4 overflow-y-auto px-4 py-4">
+                  {debtReport.groups.map(({ group, students }) => (
+                    <div key={group.id} className="space-y-2">
+                      <p className="text-sm font-semibold text-gray-800">{group.name}</p>
+                      {students.length > 0 ? (
+                        students.map(({ student, exams }) => (
+                          <div key={student.id} className="rounded-lg bg-gray-50 px-3 py-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              {student.name}
+                              <span className="ml-2 text-xs font-normal text-gray-400">
+                                {exams.length} тест{exams.length === 1 ? '' : exams.length < 5 ? 'а' : 'ов'}
+                              </span>
+                            </p>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {exams.map((exam) => (
+                                <a
+                                  key={exam.id}
+                                  href={examUrl(exam.exam_id)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                                >
+                                  {getExamDebtDate(exam)}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-400">Долгов нет.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                readOnly
+                value={debtReport.copyText}
+                className="mt-4 min-h-[320px] w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-6 text-gray-700 outline-none"
+              />
             </div>
           )}
 
@@ -432,7 +639,7 @@ export default function StatsPage() {
             <div className="px-5 py-3 max-h-72 overflow-y-auto divide-y divide-gray-50">
               {debtModal.exams.map((exam) => (
                 <div key={exam.id} className="flex items-center justify-between py-2.5 gap-3">
-                  <span className="text-sm text-gray-700 truncate">{exam.label || fmtDate(exam.date)}</span>
+                  <span className="text-sm text-gray-700 truncate">{getExamDebtDate(exam)}</span>
                   <a
                     href={examUrl(exam.exam_id)}
                     target="_blank"
