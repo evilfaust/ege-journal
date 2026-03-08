@@ -16,6 +16,8 @@ import UploadPage from './pages/UploadPage'
 import SetupGuard from './components/SetupGuard'
 import GlobalSearch from './components/GlobalSearch'
 
+import LandingPage from './pages/LandingPage'
+
 const NAV_ITEMS = [
   { to: '/', icon: LayoutDashboard, label: 'Обзор', end: true },
   { to: '/journal', icon: BookOpen, label: 'Журнал' },
@@ -44,10 +46,9 @@ function Sidebar() {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all ${
-                isActive
-                  ? 'bg-slate-900 text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)]'
-                  : 'text-slate-600 hover:bg-white/80 hover:text-slate-900'
+              `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all ${isActive
+                ? 'bg-slate-900 text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)]'
+                : 'text-slate-600 hover:bg-white/80 hover:text-slate-900'
               }`
             }
           >
@@ -73,10 +74,9 @@ function MobileNav() {
           to={to}
           end={end}
           className={({ isActive }) =>
-            `inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all ${
-              isActive
-                ? 'bg-slate-900 text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)]'
-                : 'bg-white/80 text-slate-600 ring-1 ring-slate-200/80 hover:text-slate-900'
+            `inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all ${isActive
+              ? 'bg-slate-900 text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)]'
+              : 'bg-white/80 text-slate-600 ring-1 ring-slate-200/80 hover:text-slate-900'
             }`
           }
         >
@@ -106,42 +106,51 @@ function PageTitle() {
   return <>{title}</>
 }
 
+function AppLayout() {
+  return (
+    <SetupGuard>
+      <div className="app-shell flex min-h-screen bg-slate-50/50">
+        <Sidebar />
+        <div className="flex min-h-screen flex-1 flex-col lg:ml-64">
+          <header className="app-header sticky top-0 z-10 border-b border-white/60 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Панель преподавателя
+                </p>
+                <h1 className="text-2xl font-semibold text-slate-900">
+                  <PageTitle />
+                </h1>
+              </div>
+              <GlobalSearch />
+            </div>
+          </header>
+          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            <MobileNav />
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/journal" element={<Journal />} />
+              <Route path="/journal/:groupId" element={<Journal />} />
+              <Route path="/student/:studentId" element={<StudentPage />} />
+              <Route path="/student/:studentId/print" element={<StudentReportPage />} />
+              <Route path="/exam/:examId" element={<ExamPage />} />
+              <Route path="/stats" element={<StatsPage />} />
+              <Route path="/upload" element={<UploadPage />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </SetupGuard>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <SetupGuard>
-        <div className="app-shell flex min-h-screen">
-          <Sidebar />
-          <div className="flex min-h-screen flex-1 flex-col lg:ml-64">
-            <header className="app-header sticky top-0 z-10 border-b border-white/60 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Панель преподавателя
-                  </p>
-                  <h1 className="text-2xl font-semibold text-slate-900">
-                    <PageTitle />
-                  </h1>
-                </div>
-                <GlobalSearch />
-              </div>
-            </header>
-            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-              <MobileNav />
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/journal" element={<Journal />} />
-                <Route path="/journal/:groupId" element={<Journal />} />
-                <Route path="/student/:studentId" element={<StudentPage />} />
-                <Route path="/student/:studentId/print" element={<StudentReportPage />} />
-                <Route path="/exam/:examId" element={<ExamPage />} />
-                <Route path="/stats" element={<StatsPage />} />
-                <Route path="/upload" element={<UploadPage />} />
-              </Routes>
-            </main>
-          </div>
-        </div>
-      </SetupGuard>
+      <Routes>
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/*" element={<AppLayout />} />
+      </Routes>
     </BrowserRouter>
   )
 }
