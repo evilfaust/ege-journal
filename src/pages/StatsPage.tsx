@@ -420,87 +420,7 @@ export default function StatsPage() {
             </div>
           )}
 
-          {debtReport.copyText && (
-            <div className="card p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-800">Отчёт по долгам для чата</h3>
-                  <p className="text-sm text-gray-400">
-                    Формируется по выбранному периоду. Ниже можно проверить долги по кликабельным датам.
-                  </p>
-                </div>
-                <button
-                  onClick={copyDebtReport}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
-                >
-                  {reportCopied ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
-                  {reportCopied ? 'Скопировано!' : 'Скопировать отчёт'}
-                </button>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {REPORT_PERIODS.map((period) => (
-                  <button
-                    key={period.key}
-                    onClick={() => {
-                      setSelectedReportPeriod(period.key)
-                      setReportCopied(false)
-                    }}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
-                      selectedReportPeriod === period.key
-                        ? 'bg-brand-600 text-white'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
-                    }`}
-                  >
-                    {period.title}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-                <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
-                  {selectedPeriodTitle}
-                </div>
-                <div className="max-h-[360px] space-y-4 overflow-y-auto px-4 py-4">
-                  {debtReport.groups.map(({ group, students }) => (
-                    <div key={group.id} className="space-y-2">
-                      <p className="text-sm font-semibold text-gray-800">{group.name}</p>
-                      {students.length > 0 ? (
-                        students.map(({ student, exams }) => (
-                          <div key={student.id} className="rounded-lg bg-gray-50 px-3 py-2">
-                            <p className="text-sm font-medium text-gray-800">
-                              {student.name}
-                              <span className="ml-2 text-xs font-normal text-gray-400">
-                                {exams.length} тест{exams.length === 1 ? '' : exams.length < 5 ? 'а' : 'ов'}
-                              </span>
-                            </p>
-                            <div className="mt-1 flex flex-wrap gap-2">
-                              {exams.map((exam) => (
-                                <a
-                                  key={exam.id}
-                                  href={examUrl(exam.exam_id)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
-                                >
-                                  {getExamDebtDate(exam)}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-gray-400">Долгов нет.</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <textarea
-                readOnly
-                value={debtReport.copyText}
-                className="mt-4 min-h-[320px] w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-6 text-gray-700 outline-none"
-              />
-            </div>
-          )}
+
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Debts */}
@@ -584,6 +504,8 @@ export default function StatsPage() {
             </div>
           </div>
 
+
+
           {/* Problem links for hardest tasks */}
           {weakTasks.filter((t) => t.rate < 0.5).length > 0 && (
             <div className="card p-5">
@@ -610,6 +532,88 @@ export default function StatsPage() {
           )}
         </>
       )}
+
+                    {debtReport.copyText && (
+            <div className="card p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Отчёт по долгам для чата</h3>
+                  <p className="text-sm text-gray-400">
+                    Формируется по выбранному периоду. Ниже можно проверить долги по кликабельным датам.
+                  </p>
+                </div>
+                <button
+                  onClick={copyDebtReport}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                >
+                  {reportCopied ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                  {reportCopied ? 'Скопировано!' : 'Скопировать отчёт'}
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {REPORT_PERIODS.map((period) => (
+                  <button
+                    key={period.key}
+                    onClick={() => {
+                      setSelectedReportPeriod(period.key)
+                      setReportCopied(false)
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                      selectedReportPeriod === period.key
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
+                    }`}
+                  >
+                    {period.title}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+                <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
+                  {selectedPeriodTitle}
+                </div>
+                <div className="max-h-[360px] space-y-4 overflow-y-auto px-4 py-4">
+                  {debtReport.groups.map(({ group, students }) => (
+                    <div key={group.id} className="space-y-2">
+                      <p className="text-sm font-semibold text-gray-800">{group.name}</p>
+                      {students.length > 0 ? (
+                        students.map(({ student, exams }) => (
+                          <div key={student.id} className="rounded-lg bg-gray-50 px-3 py-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              {student.name}
+                              <span className="ml-2 text-xs font-normal text-gray-400">
+                                {exams.length} тест{exams.length === 1 ? '' : exams.length < 5 ? 'а' : 'ов'}
+                              </span>
+                            </p>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {exams.map((exam) => (
+                                <a
+                                  key={exam.id}
+                                  href={examUrl(exam.exam_id)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                                >
+                                  {getExamDebtDate(exam)}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-400">Долгов нет.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                readOnly
+                value={debtReport.copyText}
+                className="mt-4 min-h-[320px] w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-6 text-gray-700 outline-none"
+              />
+            </div>
+          )}
 
       {/* Debt modal */}
       {debtModal && (

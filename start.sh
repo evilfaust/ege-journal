@@ -48,11 +48,16 @@ if ! node setup.js; then
   exit 1
 fi
 
-# 4. Start dev server
+# 4. Start Telegram bot
+echo "🤖 Starting Telegram bot..."
+node bot/index.mjs &
+BOT_PID=$!
+
+# 5. Start dev server
 echo ""
 echo "🚀 Starting dev server..."
 echo ""
-echo "  App:            http://localhost:5173"
+echo "  App:            http://localhost:5151"
 echo "  PocketBase API: http://localhost:8090"
 echo ""
 echo "Press Ctrl+C to stop"
@@ -61,6 +66,6 @@ echo ""
 npm run dev &
 VITE_PID=$!
 
-trap "kill $PB_PID $VITE_PID 2>/dev/null || true" EXIT INT TERM
+trap "kill $PB_PID $BOT_PID $VITE_PID 2>/dev/null || true" EXIT INT TERM
 
 wait
