@@ -23,6 +23,9 @@ jobs:
       - name: Build
         run: npx vite build
 
+      - name: List build output
+        run: ls -la pb_public/ && echo "---" && ls -la pb_public/assets/ | head -20
+
       - name: Extract landing page
         run: |
           mkdir -p landing-dist
