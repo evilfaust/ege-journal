@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 
 const GITHUB_URL = 'https://github.com/evilfaust/ege-journal'
-const AUTHOR_URL = 'https://iopav.ru'
+const AUTHOR_URL = 'https://oipav.ru'
 
 export default function LandingPage() {
     const [dark, setDark] = useState(() => {
