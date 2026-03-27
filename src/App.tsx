@@ -29,12 +29,7 @@ function Sidebar() {
   return (
     <aside className="app-sidebar fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-white/60 lg:flex">
       <div className="border-b border-white/60 px-6 py-6">
-        <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600/10 text-brand-700 shadow-[inset_0_0_0_1px_rgba(79,110,247,0.12)]">
-          <GraduationCap size={22} />
-        </div>
-        <span className="block font-bold text-slate-800 text-lg leading-tight">
-          Журнал ЕГЭ
-        </span>
+        <img src="/ege-journal-logo.png" alt="Журнал ЕГЭ" className="mb-3 h-11 w-auto" />
         <p className="mt-1 text-sm text-slate-500">
           Аналитика по группам, тестам и прогрессу
         </p>

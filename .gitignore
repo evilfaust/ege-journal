@@ -2,8 +2,19 @@
 .idea/
 .vscode/
 .gigaidea/
+.gigaide/
 *.swp
 *.swo
+
+# macOS system files
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Claude Code local settings
+.claude/
 
 # Logs
 logs
@@ -149,6 +160,7 @@ vite.config.ts.timestamp-*
 pb
 pb.zip
 pb_data/
+pb_data.bak*/
 backups/
 pb_public/assets/*.js
 pb_public/assets/*.css
@@ -158,3 +170,13 @@ pb_migrations/
 # Database
 *.db
 *.sqlite
+
+# Sensitive / private data
+*.xlsx
+*.xls
+
+# Temp files
+tmp/
+
+# Bot secrets (use .env.example as reference)
+.env.bot
