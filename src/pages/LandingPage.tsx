@@ -352,7 +352,7 @@ export default function LandingPage() {
                             rel="noreferrer"
                             className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-sm cursor-pointer"
                         >
-                            iopav.ru
+                            oipav.ru
                         </a>
                     </div>
                 </div>
