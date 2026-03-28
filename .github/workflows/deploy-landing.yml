@@ -23,14 +23,12 @@ jobs:
       - name: Build
         run: npx vite build
 
-      - name: List build output
-        run: ls -la pb_public/ && echo "---" && ls -la pb_public/assets/ | head -20
-
       - name: Extract landing page
         run: |
           mkdir -p landing-dist
           mv pb_public/landing.html landing-dist/index.html
           cp -r pb_public/assets landing-dist/
+          find pb_public -maxdepth 1 -type f ! -name '*.html' -exec cp {} landing-dist/ \;
 
       - name: Deploy via rsync
         uses: burnett01/rsync-deployments@7.0.1
