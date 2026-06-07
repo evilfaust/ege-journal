@@ -184,3 +184,4 @@ test_full_parser.ts
 
 # Bot secrets (use .env.example as reference)
 .env.bot
+!.env.lemma.example
