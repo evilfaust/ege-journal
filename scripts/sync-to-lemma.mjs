@@ -72,16 +72,35 @@ async function main() {
     lemma.collection('ext_journal_results').getFullList({ filter: fOwner }),
     lemma.collection('ext_journal_task_results').getFullList({ filter: fOwner }),
   ]);
-  const exExamKey = new Map(exExams.map((r) => [r.exam_id, r.id]));
-  const exResKey = new Map(exResults.map((r) => [`${r.exam_id}|${r.student_name}`, r.id]));
-  const exTaskKey = new Map(exTasks.map((r) => [`${r.exam_id}|${r.student_name}|${r.task_number}`, r.id]));
+  // Храним сам существующий record (не только id), чтобы сравнивать поля и
+  // не слать update там, где ничего не поменялось.
+  const exExamKey = new Map(exExams.map((r) => [r.exam_id, r]));
+  const exResKey = new Map(exResults.map((r) => [`${r.exam_id}|${r.student_name}`, r]));
+  const exTaskKey = new Map(exTasks.map((r) => [`${r.exam_id}|${r.student_name}|${r.task_number}`, r]));
   console.log(`[3/5] В Lemma уже: ${exExams.length} работ, ${exResults.length} результатов, ${exTasks.length} ответов`);
 
-  const stat = { exams: { c: 0, u: 0 }, results: { c: 0, u: 0 }, tasks: { c: 0, u: 0 } };
-  const upsert = async (coll, existId, data, kind) => {
-    if (!PUSH) { stat[kind][existId ? 'u' : 'c']++; return; }
-    if (existId) { await lemma.collection(coll).update(existId, data); stat[kind].u++; }
-    else { await lemma.collection(coll).create({ ...data, owner }); stat[kind].c++; }
+  // Сравнение значений поля: null/undefined эквивалентны; bool/число/строка
+  // приводятся к сопоставимому виду (PB может вернуть число строкой и т.п.).
+  const sameVal = (a, b) => {
+    const na = a === null || a === undefined ? null : a;
+    const nb = b === null || b === undefined ? null : b;
+    if (typeof na === 'boolean' || typeof nb === 'boolean') return !!na === !!nb;
+    if (na === null || nb === null) return na === nb;
+    return String(na) === String(nb);
+  };
+  const unchanged = (rec, data) => Object.keys(data).every((k) => sameVal(rec[k], data[k]));
+
+  // c=created, u=updated, s=skipped (без изменений)
+  const stat = { exams: { c: 0, u: 0, s: 0 }, results: { c: 0, u: 0, s: 0 }, tasks: { c: 0, u: 0, s: 0 } };
+  const upsert = async (coll, exist, data, kind) => {
+    if (exist) {
+      if (unchanged(exist, data)) { stat[kind].s++; return; }
+      if (PUSH) await lemma.collection(coll).update(exist.id, data);
+      stat[kind].u++;
+    } else {
+      if (PUSH) await lemma.collection(coll).create({ ...data, owner });
+      stat[kind].c++;
+    }
   };
 
   // [4/5] Работы
@@ -127,9 +146,10 @@ async function main() {
     }, 'tasks');
   }
 
-  console.log(`[4/5] Работы: +${stat.exams.c} / ~${stat.exams.u}`);
-  console.log(`      Результаты: +${stat.results.c} / ~${stat.results.u}`);
-  console.log(`      Ответы: +${stat.tasks.c} / ~${stat.tasks.u}`);
+  // формат: +создано / ~обновлено / =без изменений
+  console.log(`[4/5] Работы: +${stat.exams.c} / ~${stat.exams.u} / =${stat.exams.s}`);
+  console.log(`      Результаты: +${stat.results.c} / ~${stat.results.u} / =${stat.results.s}`);
+  console.log(`      Ответы: +${stat.tasks.c} / ~${stat.tasks.u} / =${stat.tasks.s}`);
   console.log(`[5/5] ${PUSH ? '✅ Залито в Lemma.' : 'ℹ️  DRY-RUN — ничего не записано. Повтори с --push.'}\n`);
 }
 

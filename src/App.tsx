@@ -16,6 +16,7 @@ import UploadPage from './pages/UploadPage'
 import HomeworkPrintPage from './pages/HomeworkPrintPage'
 import SetupGuard from './components/SetupGuard'
 import GlobalSearch from './components/GlobalSearch'
+import LemmaSyncButton from './components/LemmaSyncButton'
 import LandingPage from './pages/LandingPage'
 
 const NAV_ITEMS = [
@@ -149,6 +150,7 @@ function TopBar() {
         <div className="hidden md:block">
           <GlobalSearch />
         </div>
+        <LemmaSyncButton />
       </div>
     </header>
   )
