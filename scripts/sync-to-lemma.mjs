@@ -60,6 +60,8 @@ async function main() {
   ]);
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const studentName = new Map(students.map((s) => [s.id, s.name]));
+  // telegram_id — железный ключ матча ученика между журналом и Lemma (см. weaknessProfile).
+  const studentTg = new Map(students.map((s) => [s.id, s.telegram_id || '']));
   const examById = new Map(exams.map((e) => [e.id, e]));
   // (localExamId|task_number) -> problem_id
   const problemByTask = new Map(examTasks.map((t) => [`${t.exam}|${t.task_number}`, t.problem_id]));
@@ -123,6 +125,7 @@ async function main() {
     await upsert('ext_journal_results', exResKey.get(`${e.exam_id}|${sName}`), {
       exam_id: e.exam_id,
       student_name: sName,
+      telegram_id: studentTg.get(r.student) || '',
       group_name: groupName.get(e.group) || '',
       grade: r.grade ?? null,
       correct_count: r.correct_count ?? null,
@@ -140,6 +143,7 @@ async function main() {
     await upsert('ext_journal_task_results', exTaskKey.get(`${e.exam_id}|${sName}|${a.task_number}`), {
       exam_id: e.exam_id,
       student_name: sName,
+      telegram_id: studentTg.get(a.student) || '',
       task_number: a.task_number,
       problem_id: problemByTask.get(`${a.exam}|${a.task_number}`) || '',
       is_correct: !!a.is_correct,
